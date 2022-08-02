@@ -8,6 +8,22 @@ JENKINS_PV_YAML="jenkins-persistentvolume.yaml"
 JENKINS_SA_YAML="jenkins-serviceaccount.yaml"
 # JENKINS_HELM_VALUES_YAML="jenkins-helm-values.yaml"
 
+
+install_kubernetes_cd_plugin() {
+  cd /tmp 
+  wget https://updates.jenkins.io/download/plugins/kubernetes-cd/1.0.0/kubernetes-cd.hpi
+  wget http://192.168.66.100:8080/jnlpJars/jenkins-cli.jarhttp://192.168.66.100:8080/jnlpJars/jenkins-cli.jar
+  java -jar jenkins-cli.jar -s http://192.168.66.100:8080/ install-plugin kubernetes-cd.hpi
+}
+
+install_gradle_bin() {
+  cd /tmp
+  wget https://services.gradle.org/distributions/gradle-7.5-bin.zip
+  mkdir /opt/gradle
+  unzip -d /opt/gradle gradle-7.5-bin.zip
+  ls /opt/gradle/gradle-7.5
+}
+
 chkexit() {
   code="$1"
   msg="$2"
@@ -22,23 +38,23 @@ chkexit() {
 }
 
 setup() {
-# Create a ns to segregate Jenkins objects within the k8s cluster
-echo -e "Create '${JENKINS_NS_YAML}' .. "
-cat >"${JENKINS_NS_YAML}" <<EOF
+  # Create a ns to segregate Jenkins objects within the k8s cluster
+  echo -e "Create '${JENKINS_NS_YAML}' .. "
+  cat >"${JENKINS_NS_YAML}" <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
   name: jenkins
 EOF
-kubectl apply -f $JENKINS_NS_YAML
-chkexit $? "Apply '${JENKINS_NS_YAML}'"
-
-mkdir -p /data/jenkins-volume/
-chown -R 1000:1000 /data/jenkins-volume
-
-# Create a pv to store Jenkins data (preserve data across restarts).
-echo -e "Create '${JENKINS_PV_YAML}' .. "
-cat >"${JENKINS_PV_YAML}" <<EOF
+  kubectl apply -f $JENKINS_NS_YAML
+  chkexit $? "Apply '${JENKINS_NS_YAML}'"
+  
+  mkdir -p /data/jenkins-volume/
+  chown -R 1000:1000 /data/jenkins-volume
+  
+  # Create a pv to store Jenkins data (preserve data across restarts).
+  echo -e "Create '${JENKINS_PV_YAML}' .. "
+  cat >"${JENKINS_PV_YAML}" <<EOF
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -69,11 +85,11 @@ spec:
     requests:
       storage: 3Gi
 EOF
-kubectl apply -f $JENKINS_PV_YAML
-chkexit $? "Apply '${JENKINS_PV_YAML}'"
+  kubectl apply -f $JENKINS_PV_YAML
+  chkexit $? "Apply '${JENKINS_PV_YAML}'"
 
-# Create jenkins config yaml.
-cat >"${JENKINS_DEPLOY_YAML}" <<EOF
+  # Create jenkins config yaml.
+  cat >"${JENKINS_DEPLOY_YAML}" <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +114,8 @@ spec:
         env:
         - name: JENKINS_URL
           value: "http://192.168.66.100:8080/"
+        - name: GRADLE_HOME
+          value: /opt/gradle/gradle-7.5
         ports:
           - name: http-port
             containerPort: 8080
@@ -106,7 +124,7 @@ spec:
         lifecycle:
           postStart:
             exec:
-              command: ["/bin/sh", "-c", "echo 'nameserver 9.9.9.9' > /etc/resolv.conf ; echo 'search jenkins.svc.cluster.local svc.cluster.local cluster.local' >> /etc/resolv.conf ; echo 'nameserver 10.96.0.10' >> /etc/resolv.conf ; echo 'options ndots:5' >> /etc/resolv.conf"]
+              command: ["/bin/sh", "-c", "echo 'nameserver 9.9.9.9' > /etc/resolv.conf ; echo 'search jenkins.svc.cluster.local svc.cluster.local cluster.local' >> /etc/resolv.conf ; echo 'nameserver 10.96.0.10' >> /etc/resolv.conf ; echo 'options ndots:5' >> /etc/resolv.conf; cd /tmp; curl -LO https://services.gradle.org/distributions/gradle-7.5-bin.zip; mkdir /opt/gradle; unzip -d /opt/gradle gradle-7.5-bin.zip"]
         securityContext:
           privileged: true
         volumeMounts:
@@ -117,12 +135,12 @@ spec:
           persistentVolumeClaim:
             claimName: jenkins-pvc
 EOF
-kubectl apply -f $JENKINS_DEPLOY_YAML
-chkexit $? "Apply '${JENKINS_DEPLOY_YAML}'"
-# command: ["/bin/sh"]
-# args: ["-c", "curl -s -k https://downloads.gradle-dn.com/distributions/gradle-7.5-bin.zip -o /tmp/gradle-7.5-bin.zip; mkdir -p /var/jenkins_home/gradle; unzip -d /var/jenkins_home/gradle /tmp/gradle-7.5-bin.zip; ls /var/jenkins_home/gradle"]
+  kubectl apply -f $JENKINS_DEPLOY_YAML
+  chkexit $? "Apply '${JENKINS_DEPLOY_YAML}'"
+  # command: ["/bin/sh"]
+  # args: ["-c", "curl -s -k https://downloads.gradle-dn.com/distributions/gradle-7.5-bin.zip -o /tmp/gradle-7.5-bin.zip; mkdir -p /var/jenkins_home/gradle; unzip -d /var/jenkins_home/gradle /tmp/gradle-7.5-bin.zip; ls /var/jenkins_home/gradle"]
 
-cat >"${JENKINS_SVC_YAML}" <<EOF
+  cat >"${JENKINS_SVC_YAML}" <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -152,23 +170,23 @@ spec:
   selector:
     app: jenkins
 EOF
-kubectl apply -f $JENKINS_SVC_YAML
-chkexit $? "Apply '${JENKINS_SVC_YAML}'"
+  kubectl apply -f $JENKINS_SVC_YAML
+  chkexit $? "Apply '${JENKINS_SVC_YAML}'"
 
-# jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}")
-# echo -e "Port-forward from ${jenkins_pod_name}:8080"
-# kubectl --namespace jenkins port-forward $jenkins_pod_name 8080:8080
-
-# jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}"); kubectl exec -it $jenkins_pod_name -n jenkins -- /bin/bash
-
-
-echo -e "Waiting for k8s starts Jenkins .. \nForward service/jenkins 8080:8080 .. "
-echo -e "Do:\nsudo kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins"
-# sleep 2m; kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins
-# admin:bd7f46e968ef419c9b7b0bae1be670a1 e.g from /var/jenkins_home/secrets/initialAdminPassword
-
-# sed -i 's/<useSecurity>true<\/useSecurity>/<useSecurity>false<\/useSecurity>/g' /var/jenkins_home/config.xml
-# sed -i 's/<useSecurity>true<\/useSecurity>/<useSecurity>false<\/useSecurity>/g' /var/jenkins_home/users/admin_8991272012169408268/config.xml
+  # jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}")
+  # echo -e "Port-forward from ${jenkins_pod_name}:8080"
+  # kubectl --namespace jenkins port-forward $jenkins_pod_name 8080:8080
+  
+  # jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}"); kubectl exec -it $jenkins_pod_name -n jenkins -- /bin/bash
+  
+  
+  echo -e "Waiting for k8s starts Jenkins .. \nForward service/jenkins 8080:8080 .. "
+  echo -e "Do:\nsudo kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins"
+  # sleep 2m; kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins
+  # admin:bd7f46e968ef419c9b7b0bae1be670a1 e.g from /var/jenkins_home/secrets/initialAdminPassword
+  
+  # sed -i 's/<useSecurity>true<\/useSecurity>/<useSecurity>false<\/useSecurity>/g' /var/jenkins_home/config.xml
+  # sed -i 's/<useSecurity>true<\/useSecurity>/<useSecurity>false<\/useSecurity>/g' /var/jenkins_home/users/admin_8991272012169408268/config.xml
 }
 
 remove() {

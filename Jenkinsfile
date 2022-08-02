@@ -4,20 +4,45 @@ pipeline {
 
   stages {
 
-  /*  stage('Checkout Source') {
+    stage('Checkout Source') {
       steps {
         git url:'https://github.com/SasanLabs/VulnerableApp.git', branch:'master'
       }
     }
 
-    stage('Build App with gradle') {
+   /* stage('Build App with gradle') {
       steps {
         script {
-          sh 'gradle bootJar'
+          sh '/opt/gradle/gradle-7.5/bin/gradle bootJar'
+          sh 'mv /var/jenkins_home/workspace/vulnapp-k8s-deploy/build/libs/VulnerableApp-1.0.0.jar /VulnerableApp-1.0.0.jar'
         }
       }
     }
+*/
 
+    stage('Create app Dockerfile') {
+      steps {
+        script {
+          def vulnapp_dockerfile_content = '''
+FROM java:8
+
+WORKDIR /
+
+ADD /VulnerableApp-1.0.0.jar VulnerableApp-1.0.0.jar
+
+EXPOSE 9090
+
+CMD java -jar VulnerableApp-1.0.0.jar
+
+'''
+          writeFile file: 'Dockerfile', text: vulnapp_dockerfile_content
+          sh 'ls -l Dockerfile'
+          sh 'cat Dockerfile'
+
+        }
+      }
+    }
+/*
     stage("Build image") {
       steps {
         script {
@@ -36,8 +61,8 @@ pipeline {
           }
         }
       }
-    } */
-
+    } 
+*/
     stage('Create app .yaml file for k8s') {
       steps {
         script {
@@ -53,6 +78,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vulnapp
+  namespace: vulnapp
 spec:
   replicas: 1
   selector:
@@ -75,6 +101,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vulnapp-svc
+  namespace: vulnapp
   labels:
     app: vulnapp
 spec:
@@ -82,7 +109,7 @@ spec:
     app: vulnapp
   type: NodePort
   ports:
-  - nodePort: 19991
+  - nodePort: 30001
     port: 9090
     targetPort: 9090
 '''
@@ -93,10 +120,11 @@ spec:
         }
       }
     }
+
     stage('Deploy App to k8s') {
       steps {
         script {
-          kubernetesDeploy(configs: "vulnapp.yaml", kubeconfigId: "Kubernetes")
+          kubernetesDeploy(configs: "vulnapp.yaml", kubeconfigId: "kubeconfig")
         }
       }
     }
@@ -104,6 +132,3 @@ spec:
   }
 
 }
-
-
-// /var/jenkins_home/tools/hudson.plugins.gradle.GradleInstallation/gradle7.5/bin/gradle bootJar
