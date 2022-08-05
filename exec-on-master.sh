@@ -5,7 +5,9 @@ kubeadm init --apiserver-advertise-address 192.168.66.100 --pod-network-cidr=10.
 
 # gives help strings
 # sudo kubeadm join 192.168.66.100:6443 --token uc7uxt.pynieo6yhvexlhtv	--discovery-token-ca-cert-hash sha256:9af6ca8bb2ba4d7407de00b86ea128ad3dddeaee1ef060dc9bae401e89038b4a
-mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
 
 # Now list nodes gives only one which is master by
 # `kubectl get nodes`, its 'STATUS' is NotReady.
@@ -15,6 +17,7 @@ wget -q -O- https://raw.githubusercontent.com/coreos/flannel/master/Documentatio
 kubectl apply -f kube-flannel.yaml
 
 kubectl get cs
+
 # if scheduler and/or controller unhealthy
 # In /etc/kubernetes/manifests/kube-scheduler.yaml :
 # Clear the line (spec->containers->command) containing this phrase:  -- port=0

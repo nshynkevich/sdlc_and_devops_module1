@@ -1,4 +1,11 @@
 pipeline {
+  environment {
+    user = "nshynkevich"
+    repo = "devsecops"
+    imagetag= "module1_VulnerableApp"
+    registryCredential = 'dockerhub'
+    dockerImage = ''
+  }
 
   agent any
 
@@ -10,15 +17,13 @@ pipeline {
       }
     }
 
-   /* stage('Build App with gradle') {
+   stage('Build App with gradle') {
       steps {
         script {
           sh '/opt/gradle/gradle-7.5/bin/gradle bootJar'
-          sh 'mv /var/jenkins_home/workspace/vulnapp-k8s-deploy/build/libs/VulnerableApp-1.0.0.jar /VulnerableApp-1.0.0.jar'
         }
       }
     }
-*/
 
     stage('Create app Dockerfile') {
       steps {
@@ -26,28 +31,34 @@ pipeline {
           def vulnapp_dockerfile_content = '''
 FROM java:8
 
-WORKDIR /
+ADD build/libs/VulnerableApp-1.0.0.jar /VulnerableApp-1.0.0.jar
 
-ADD /VulnerableApp-1.0.0.jar VulnerableApp-1.0.0.jar
+WORKDIR /
 
 EXPOSE 9090
 
-CMD java -jar VulnerableApp-1.0.0.jar
+CMD java -jar /VulnerableApp-1.0.0.jar
 
 '''
           writeFile file: 'Dockerfile', text: vulnapp_dockerfile_content
-          sh 'ls -l Dockerfile'
-          sh 'cat Dockerfile'
 
         }
       }
     }
-/*
+
+ /* stage('Docker Build') {
+      agent any
+      steps {
+        sh 'docker build -t nshynkevich/devsecops:module1_VulnerableApp .'
+      }
+    }
+*/
+
     stage("Build image") {
       steps {
         script {
           //myapp = docker.build("user/repo:${env.BUILD_ID}")
-          myapp = docker.build("nshynkevich/devsecops:module1_VulnerableApp")
+          dockerImage = docker.build "${user}/${repo}:${env.imagetag}_${env.BUILD_ID}"
         }
       }
     }
@@ -55,14 +66,15 @@ CMD java -jar VulnerableApp-1.0.0.jar
     stage("Push image") {
       steps {
         script {
-          docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
-            myapp.push("latest")
+          docker.withRegistry('', 'dockerhub') {
+            dockerImage.push("${env.imagetag}_${env.BUILD_ID}")
+            dockerImage.push("${env.imagetag}_latest")
             //  myapp.push("${env.BUILD_ID}")
           }
         }
       }
     } 
-*/
+
     stage('Create app .yaml file for k8s') {
       steps {
         script {
@@ -92,7 +104,7 @@ spec:
     spec:
       containers:
       - name: vulnapp-container
-        image: nshynkevich/devsecops:module1_VulnerableApp
+        image: ''' + "${user}/${repo}:${imagetag}_latest" + '''
         imagePullPolicy: Always
         ports:
         - containerPort: 9090

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 IFNAME=$1
 ADDRESS="$(ip -4 addr show $IFNAME | grep "inet" | head -1 |awk '{print $2}' | cut -d/ -f1)"
@@ -26,7 +26,7 @@ apt-get update &&  apt-get install -y apt-transport-https gnupg2 curl
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg |  apt-key add -
 echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" |  tee -a /etc/apt/sources.list.d/kubernetes.list
 apt-get update
-apt-get install -y kubelet kubeadm kubectl unzip
+apt-get install -y kubelet kubeadm kubectl unzip docker.io
 apt-get install bash-completion
 echo 'source <(kubectl completion bash)' >>~/.bashrc
 
