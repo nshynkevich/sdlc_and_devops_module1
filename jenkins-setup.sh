@@ -12,7 +12,7 @@ JENKINS_SA_YAML="jenkins-serviceaccount.yaml"
 install_kubernetes_cd_plugin() {
   cd /tmp 
   wget https://updates.jenkins.io/download/plugins/kubernetes-cd/1.0.0/kubernetes-cd.hpi
-  wget http://192.168.66.100:8080/jnlpJars/jenkins-cli.jarhttp://192.168.66.100:8080/jnlpJars/jenkins-cli.jar
+  wget http://192.168.66.100:8080/jnlpJars/jenkins-cli.jar
   java -jar jenkins-cli.jar -s http://192.168.66.100:8080/ install-plugin kubernetes-cd.hpi
 }
 
@@ -39,56 +39,54 @@ chkexit() {
 
 setup1() {
 
+  echo "Installing Jenkins .. "
 
-echo "Installing Jenkins .. "
+  echo "START" >> /tmp/status.txt
+  chmod 777 /tmp/status.txt
+  # config jenkins installer on ubuntu
+  add-apt-repository ppa:webupd8team/java -y
+  wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | apt-key add -
 
-echo "START" >> /tmp/status.txt
-sudo chmod 777 /tmp/status.txt
-# config jenkins installer on ubuntu
-sudo add-apt-repository ppa:webupd8team/java -y
-wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -
+  # config java8 installer on ubuntu
+  sh -c 'echo "deb https://pkg.jenkins.io/debian binary/" >> /etc/apt/sources.list'
+  echo debconf shared/accepted-oracle-license-v1-1 select true | \
+  debconf-set-selections
+  echo debconf shared/accepted-oracle-license-v1-1 seen true | \
+  debconf-set-selections
 
-# config java8 installer on ubuntu
-sudo sh -c 'echo "deb https://pkg.jenkins.io/debian binary/" >> /etc/apt/sources.list'
-echo debconf shared/accepted-oracle-license-v1-1 select true | \
-sudo debconf-set-selections
-echo debconf shared/accepted-oracle-license-v1-1 seen true | \
-sudo debconf-set-selections
+  echo "CONFIG DONE" >> /tmp/status.txt 
+  apt-get update  >> /tmp/status.txt
 
-echo "CONFIG DONE" >> /tmp/status.txt 
-sudo apt-get update  >> /tmp/status.txt
+  # apt-get install java and jenkins
+  apt-get -y install oracle-java8-installer  >> /tmp/status.txt
+  apt-get -y install jenkins  >> /tmp/status.txt
 
-# apt-get install java and jenkins
-sudo apt-get -y install oracle-java8-installer  >> /tmp/status.txt
-sudo apt-get -y install jenkins  >> /tmp/status.txt
+  echo "APT-GET INSTALL DONE" >> /tmp/status.txt
 
-echo "APT-GET INSTALL DONE" >> /tmp/status.txt
+  # wait for jenkins start up
+  response=""
+  key=""
+  while [ `echo $response | grep 'Authenticated' | wc -l` = 0 ]; do
+    find / -name initialAdminPassword -type f >/dev/null
+    key=`cat /var/lib/jenkins/secrets/initialAdminPassword`
+    echo $key >> /tmp/status.txt
+    response=`java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 who-am-i --username admin --password $key`
+    echo $response
+    echo "Jenkins not started, wait for 2s"
+    sleep 2
+  done >> /tmp/status.txt
+  echo "Jenkins started" >> /tmp/status.txt
+  echo "Install Plugins" >> /tmp/status.txt
 
-# wait for jenkins start up
-response=""
-key=""
-while [ `echo $response | grep 'Authenticated' | wc -l` = 0 ]; do
-  sudo find / -name initialAdminPassword -type f >/dev/null
-  key=`sudo cat /var/lib/jenkins/secrets/initialAdminPassword`
-  echo $key >> /tmp/status.txt
-  response=`sudo java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 who-am-i --username admin --password $key`
-  sudo echo $response
-  sudo echo "Jenkins not started, wait for 2s"
-  sleep 2
-done >> /tmp/status.txt
-echo "Jenkins started" >> /tmp/status.txt
-echo "Install Plugins" >> /tmp/status.txt
+  # install plugins with jenkins-cli
+  for package in ant blueocean blueocean-autofavorite build-timeout email-ext ghprb gradle jacoco workflow-aggregator pipeline-github-lib sbt ssh-slaves subversion timestamper ws-cleanup; do sudo sh -c "sudo java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 install-plugin $package --username admin --password $key >> /tmp/status.txt"; done;  
 
-# install plugins with jenkins-cli
-for package in ant blueocean blueocean-autofavorite build-timeout email-ext ghprb gradle jacoco workflow-aggregator pipeline-github-lib sbt ssh-slaves subversion timestamper ws-cleanup; do sudo sh -c "sudo java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 install-plugin $package --username admin --password $key >> /tmp/status.txt"; done;  
+  echo "PLUGINS INSTALL DONE" >> /tmp/status.txt
 
-echo "PLUGINS INSTALL DONE" >> /tmp/status.txt
+  # restart jenkins
+  /etc/init.d/jenkins restart  >> /tmp/status.txt
 
-# restart jenkins
-/etc/init.d/jenkins restart  >> /tmp/status.txt
-
-echo "ALL DONE" >> /tmp/status.txt
-
+  echo "ALL DONE" >> /tmp/status.txt
 
 }
 
@@ -102,13 +100,13 @@ setup() {
   cd $HOME/jenkins_installation
 
   apt update 
-  apt install gnupg iproute2 wget git -y
+  apt install unzip gnupg iproute2 wget git -y
   wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | apt-key add -
   sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
 
   apt update
-  apt install openjdk-8-jdk -y
-  chkexit $? "openjdk-8-jdk install"
+  apt install openjdk-11-jdk -y
+  chkexit $? "openjdk-11-jdk install"
 
   apt install jenkins -y
   chkexit $? "jenkins install"
@@ -150,7 +148,7 @@ EOF
 
   usermod -aG docker jenkins
 
-
+#-Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400)
 }
 
 remove() {
@@ -321,3 +319,8 @@ k8s_remove() {
 }
 
 setup
+
+[ ! -d /opt/gradle ]  && install_gradle_bin
+
+exit 0
+

@@ -5,6 +5,7 @@ pipeline {
     imagetag= "module1_VulnerableApp"
     registryCredential = 'dockerhub'
     dockerImage = ''
+    my_own_project_key = "sqa_ffa83427193399de6f31784a83590f5e674ff51c"
   }
 
   agent any
@@ -17,7 +18,21 @@ pipeline {
       }
     }
 
-   stage('Build App with gradle') {
+    stage('SonarQube analysis') {
+
+      steps {
+        withSonarQubeEnv(installationName: 'SonarQubeVM1') {
+          sh "./gradlew sonarqube \
+                  -Dsonar.host.url=${env.SONAR_HOST_URL} \
+                  -Dsonar.login=${env.SONAR_AUTH_TOKEN} \
+                  -Dsonar.projectKey=${my_own_project_key} \
+                  -Dsonar.projectName='vulnapp' \
+                  -Dsonar.projectVersion=${BUILD_NUMBER}"
+        }
+      }
+    }
+
+    stage('Build App with gradle') {
       steps {
         script {
           sh '/opt/gradle/gradle-7.5/bin/gradle bootJar'
@@ -29,7 +44,7 @@ pipeline {
       steps {
         script {
           def vulnapp_dockerfile_content = '''
-FROM java:8
+FROM openjdk:8-alpine
 
 ADD build/libs/VulnerableApp-1.0.0.jar /VulnerableApp-1.0.0.jar
 
