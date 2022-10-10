@@ -6,14 +6,17 @@ JENKINS_DEPLOY_YAML="jenkins-deployment.yaml"
 JENKINS_SVC_YAML="jenkins-service.yaml"
 JENKINS_PV_YAML="jenkins-persistentvolume.yaml"
 JENKINS_SA_YAML="jenkins-serviceaccount.yaml"
+
+JENKINS_PORT=8000
+
 # JENKINS_HELM_VALUES_YAML="jenkins-helm-values.yaml"
 
 
 install_kubernetes_cd_plugin() {
   cd /tmp 
-  wget https://updates.jenkins.io/download/plugins/kubernetes-cd/1.0.0/kubernetes-cd.hpi
-  wget http://192.168.66.100:8080/jnlpJars/jenkins-cli.jar
-  java -jar jenkins-cli.jar -s http://192.168.66.100:8080/ install-plugin kubernetes-cd.hpi
+  wget "https://updates.jenkins.io/download/plugins/kubernetes-cd/1.0.0/kubernetes-cd.hpi"
+  wget "http://192.168.66.100:$JENKINS_PORT/jnlpJars/jenkins-cli.jar"
+  java -jar jenkins-cli.jar -s "http://192.168.66.100:$JENKINS_PORT/ install-plugin kubernetes-cd.hpi"
 }
 
 install_gradle_bin() {
@@ -70,7 +73,7 @@ setup1() {
     find / -name initialAdminPassword -type f >/dev/null
     key=`cat /var/lib/jenkins/secrets/initialAdminPassword`
     echo $key >> /tmp/status.txt
-    response=`java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 who-am-i --username admin --password $key`
+    response=`java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s "http://localhost:$JENKINS_PORT" who-am-i --username admin --password $key`
     echo $response
     echo "Jenkins not started, wait for 2s"
     sleep 2
@@ -79,7 +82,7 @@ setup1() {
   echo "Install Plugins" >> /tmp/status.txt
 
   # install plugins with jenkins-cli
-  for package in ant blueocean blueocean-autofavorite build-timeout email-ext ghprb gradle jacoco workflow-aggregator pipeline-github-lib sbt ssh-slaves subversion timestamper ws-cleanup; do sudo sh -c "sudo java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080 install-plugin $package --username admin --password $key >> /tmp/status.txt"; done;  
+  for package in ant blueocean blueocean-autofavorite build-timeout email-ext ghprb gradle jacoco workflow-aggregator pipeline-github-lib sbt ssh-slaves subversion timestamper ws-cleanup; do sudo sh -c "sudo java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:$JENKINS_PORT install-plugin $package --username admin --password $key >> /tmp/status.txt"; done;  
 
   echo "PLUGINS INSTALL DONE" >> /tmp/status.txt
 
@@ -113,12 +116,11 @@ setup() {
   java -version
   #cat /var/lib/jenkins/secrets/initialAdminPassword 
 
-  wget -q https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.11.1/jenkins-plugin-manager-2.11.1.jar -O /opt/jenkins-plugin-manager.jar
-  wget -q http://127.0.0.1:8080/jnlpJars/jenkins-cli.jar -O /opt/jenkins-cli.jar
-
-  export JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
-
+  export JAVA_OPTS="-Djenkins.install.runSetupWizard=false --httpPort=$JENKINS_PORT"
   service jenkins restart
+
+  wget -q https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.11.1/jenkins-plugin-manager-2.11.1.jar -O /opt/jenkins-plugin-manager.jar
+  wget -q "http://127.0.0.1:$JENKINS_PORT/jnlpJars/jenkins-cli.jar" -O /opt/jenkins-cli.jar
 
   cat > $HOME/jenkins_installation/plugins.txt <<EOF
 docker-plugin:1.0.0
@@ -132,18 +134,18 @@ EOF
 
   init_key=`cat /var/lib/jenkins/secrets/initialAdminPassword`
     echo $init_key
-    response=`java -jar /opt/jenkins-cli.jar -s http://localhost:8080 -auth admin:$init_key who-am-i`
+    response=`java -jar /opt/jenkins-cli.jar -s "http://localhost:$JENKINS_PORT" -auth admin:$init_key who-am-i`
     echo $response
 
   echo "Install Jenkins user credentials: $JENKINS_USER_NAME:$JENKINS_USER_PASSWORD"
-  echo 'jenkins.model.Jenkins.instance.securityRealm.createAccount("'$JENKINS_USER_NAME'", "'$JENKINS_USER_PASSWORD'")' | java -jar /opt/jenkins-cli.jar -s http://localhost:8080/ -auth admin:$init_key groovy =
+  echo 'jenkins.model.Jenkins.instance.securityRealm.createAccount("'$JENKINS_USER_NAME'", "'$JENKINS_USER_PASSWORD'")' | java -jar /opt/jenkins-cli.jar -s "http://localhost:$JENKINS_PORT/" -auth admin:$init_key groovy =
 
   echo "Installing Jenkins Plugins .. "
-  #java -jar /opt/jenkins-cli.jar -s http://localhost:8080/ -auth admin:$JENKINS_USER_PASSWORD install-plugin <plugin.hpi> -deploy
+  #java -jar /opt/jenkins-cli.jar -s http://localhost:$JENKINS_PORT/ -auth admin:$JENKINS_USER_PASSWORD install-plugin <plugin.hpi> -deploy
   java -jar /opt/jenkins-plugin-manager.jar --plugin-file /usr/share/jenkins/ref/plugins.txt
 
   echo "List of installed plugins: "
-  #java -jar /opt/jenkins-cli.jar -s http://localhost:8080 -auth admin:$JENKINS_USER_PASSWORD list-plugins
+  #java -jar /opt/jenkins-cli.jar -s http://localhost:$JENKINS_PORT -auth admin:$JENKINS_USER_PASSWORD list-plugins
   java -jar /opt/jenkins-plugin-manager.jar -l
 
   usermod -aG docker jenkins
@@ -231,12 +233,12 @@ spec:
         image: jenkins/jenkins:lts
         env:
         - name: JENKINS_URL
-          value: "http://192.168.66.100:8080/"
+          value: "http://192.168.66.100:$JENKINS_PORT/"
         - name: GRADLE_HOME
           value: /opt/gradle/gradle-7.5
         ports:
           - name: http-port
-            containerPort: 8080
+            containerPort: $JENKINS_PORT
           - name: jnlp-port
             containerPort: 50000
         lifecycle:
@@ -271,8 +273,8 @@ metadata:
 spec:
   type: NodePort
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: $JENKINS_PORT
+      targetPort: $JENKINS_PORT
       nodePort: 30000
   selector:
     app: jenkins
@@ -296,15 +298,15 @@ EOF
   chkexit $? "Apply '${JENKINS_SVC_YAML}'"
 
   # jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}")
-  # echo -e "Port-forward from ${jenkins_pod_name}:8080"
-  # kubectl --namespace jenkins port-forward $jenkins_pod_name 8080:8080
+  # echo -e "Port-forward from ${jenkins_pod_name}:$JENKINS_PORT"
+  # kubectl --namespace jenkins port-forward $jenkins_pod_name $JENKINS_PORT:$JENKINS_PORT
   
   # jenkins_pod_name=$(kubectl get pods --namespace jenkins -l "app=jenkins" -o jsonpath="{.items[0].metadata.name}"); kubectl exec -it $jenkins_pod_name -n jenkins -- /bin/bash
   
   
-  echo -e "Waiting for k8s starts Jenkins .. \nForward service/jenkins 8080:8080 .. "
-  echo -e "Do:\nsudo kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins"
-  # sleep 2m; kubectl port-forward --address 0.0.0.0 service/jenkins 8080:8080 -n jenkins
+  echo -e "Waiting for k8s starts Jenkins .. \nForward service/jenkins $JENKINS_PORT:$JENKINS_PORT .. "
+  echo -e "Do:\nsudo kubectl port-forward --address 0.0.0.0 service/jenkins $JENKINS_PORT:$JENKINS_PORT -n jenkins"
+  # sleep 2m; kubectl port-forward --address 0.0.0.0 service/jenkins $JENKINS_PORT:$JENKINS_PORT -n jenkins
   # admin:bd7f46e968ef419c9b7b0bae1be670a1 e.g from /var/jenkins_home/secrets/initialAdminPassword
   
   # sed -i 's/<useSecurity>true<\/useSecurity>/<useSecurity>false<\/useSecurity>/g' /var/jenkins_home/config.xml

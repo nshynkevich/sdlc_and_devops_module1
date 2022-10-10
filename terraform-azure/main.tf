@@ -89,9 +89,9 @@ resource "azurerm_linux_virtual_machine" "vm1vm" {
   size                  = "Standard_DS3_v2"
 
   os_disk {
-    name                 = "vm1OsDisk"
+    name                 = "vmw1OsDisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "Standard_LRS"
   }
 
   source_image_reference {
@@ -131,6 +131,11 @@ resource "azurerm_linux_virtual_machine" "vm1vm" {
     destination = "/tmp/sonarqube-setup.sh"
   }
 
+  provisioner "file" {
+    source = "../owasp-zap-setup.sh"
+    destination = "/tmp/owasp-zap-setup.sh"
+  }
+
   provisioner "remote-exec" {
       inline = [
         "chmod +x /tmp/docker-setup.sh",
@@ -149,6 +154,13 @@ resource "azurerm_linux_virtual_machine" "vm1vm" {
       inline = [
         "chmod +x /tmp/sonarqube-setup.sh",
         "sudo /tmp/sonarqube-setup.sh"
+      ]
+  }
+
+  provisioner "remote-exec" {
+      inline = [
+        "chmod +x /tmp/owasp-zap-setup.sh",
+        "sudo /tmp/owasp-zap-setup.sh"
       ]
   }
 
@@ -202,7 +214,7 @@ resource "azurerm_linux_virtual_machine" "mastervm" {
   os_disk {
     name                 = "masterOsDisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "Standard_LRS"
   }
 
   source_image_reference {
@@ -290,7 +302,7 @@ resource "azurerm_linux_virtual_machine" "worker1vm" {
   os_disk {
     name                 = "worker1OsDisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "Standard_LRS"
   }
 
   source_image_reference {

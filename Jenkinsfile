@@ -5,7 +5,6 @@ pipeline {
     imagetag= "module1_VulnerableApp"
     registryCredential = 'dockerhub'
     dockerImage = ''
-    my_own_project_key = "sqa_ffa83427193399de6f31784a83590f5e674ff51c"
   }
 
   agent any
@@ -14,7 +13,11 @@ pipeline {
 
     stage('Checkout Source') {
       steps {
-        git url:'https://github.com/SasanLabs/VulnerableApp.git', branch:'master'
+        git url:'https://github.com/nshynkevich/VulnerableApp.git', branch:'master'
+
+        script {
+          sh 'sed -i -e "s@127.0.0.1:9090@${VULNERABLE_IP}:${VULNERABLE_PORT}@g" src/main/resources/sitemap.xml'
+        }
       }
     }
 
@@ -25,9 +28,24 @@ pipeline {
           sh "./gradlew sonarqube \
                   -Dsonar.host.url=${env.SONAR_HOST_URL} \
                   -Dsonar.login=${env.SONAR_AUTH_TOKEN} \
-                  -Dsonar.projectKey=${my_own_project_key} \
+                  -Dsonar.projectKey=${MY_SONAR_TOKEN} \
+                  -Dsonar.qualitygate.wait=true \
                   -Dsonar.projectName='vulnapp' \
-                  -Dsonar.projectVersion=${BUILD_NUMBER}"
+                  -Dsonar.projectVersion=${BUILD_NUMBER} \
+                  -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/codeCoverage.xml \
+                  -Dsonar.dependencyCheck.xmlReportPath=build/reports/dependency-check-report.xml \
+                  -Dsonar.dependencyCheck.htmlReportPath=build/reports/dependency-check-report.html \
+                  -Dsonar.dependencyCheck.jsonReportPath=build/reports/dependency-check-report.json \
+                  -Dsonar.dependencyCheck.summarize=true"
+        }
+      }
+    }
+
+    stage('OWASP Dependenccy Check analysis') {
+
+      steps {
+        script{
+          sh "./gradlew dependencyCheckAnalyze"
         }
       }
     }
@@ -47,7 +65,7 @@ pipeline {
 FROM openjdk:8-alpine
 
 ADD build/libs/VulnerableApp-1.0.0.jar /VulnerableApp-1.0.0.jar
-
+COPY src/main/resources/sitemap.xml /sitemap.xml
 WORKDIR /
 
 EXPOSE 9090

@@ -2,6 +2,8 @@
 
 export SONAR_PWD="sonarqube"
 export SONAR_USER="sonarqube"
+export SONAR_PORT=9090
+
 useradd -s /bin/bash $SONAR_USER
 usermod -aG sudo $SONAR_USER
 #usermod -aG wheel $SONAR_USER
@@ -55,7 +57,10 @@ mv /opt/sonarqube-* /opt/sonarqube
 
 sed -i -e 's/#sonar.jdbc.username=/sonar.jdbc.username=sonarqube/g' /opt/sonarqube/conf/sonar.properties
 sed -i -e 's/#sonar.jdbc.password=/sonar.jdbc.password=sonarqube/g' /opt/sonarqube/conf/sonar.properties
+sed -i -e "s~#sonar.web.port=.*~sonar.web.port=$SONAR_PORT~g" /opt/sonarqube/conf/sonar.properties
+
 sed -i -e 's~#sonar.jdbc.url=jdbc:postgresql.*~sonar.jdbc.url=jdbc:postgresql://localhost/sonardb~g' /opt/sonarqube/conf/sonar.properties
+
 echo "Step 6: edit /opt/sonarqube/conf/sonar.properties"
 
 [ -e /etc/systemd/system/sonar.service ] && rm -f /etc/systemd/system/sonar.service
@@ -78,7 +83,14 @@ echo "Step 7: create sonar.service"
 
 chown -R $SONAR_USER: /opt/sonarqube
 #ufw allow 9000/tcp
-sysctl -w vm.max_map_count=262144
+#sysctl -w vm.max_map_count=262144
+cat /etc/sysctl.conf|grep max_map_count 2>/dev/null;
+if [ $? -ne 0 ]; then 
+	echo "vm.max_map_count=262144" | sudo tee /etc/sysctl.conf ; 
+	sudo sysctl -p; 
+else 
+	echo "found $(cat /etc/sysctl.conf|grep max_map_count)"; fi
+
 
 systemctl enable sonar
 systemctl start sonar
