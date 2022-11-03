@@ -2,7 +2,7 @@ pipeline {
   environment {
     user = "nshynkevich"
     repo = "devsecops"
-    imagetag= "module1_VulnerableApp"
+    imagetag= "module2_VulnerableApp"
     registryCredential = 'dockerhub'
     dockerImage = ''
   }
@@ -41,7 +41,7 @@ pipeline {
       }
     }
 
-    stage('OWASP Dependenccy Check analysis') {
+    stage('OWASP Dependency Check analysis') {
 
       steps {
         script{
@@ -79,14 +79,6 @@ CMD java -jar /VulnerableApp-1.0.0.jar
       }
     }
 
- /* stage('Docker Build') {
-      agent any
-      steps {
-        sh 'docker build -t nshynkevich/devsecops:module1_VulnerableApp .'
-      }
-    }
-*/
-
     stage("Build image") {
       steps {
         script {
@@ -111,7 +103,7 @@ CMD java -jar /VulnerableApp-1.0.0.jar
     stage('Create app .yaml file for k8s') {
       steps {
         script {
-          def vulnapp_yaml_content = '''
+          def vulnerableapp_yaml_content = '''
 ---
 apiVersion: v1
 kind: Namespace
@@ -122,21 +114,21 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vulnapp
+  name: vulnerableapp
   namespace: vulnapp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vulnapp
+      app: vulnerableapp
   template:
     metadata:
-      name: vulnapp-pod
+      name: vulnerableapp-pod
       labels:
-        app: vulnapp
+        app: vulnerableapp
     spec:
       containers:
-      - name: vulnapp-container
+      - name: vulnerableapp-container
         image: ''' + "${user}/${repo}:${imagetag}_latest" + '''
         imagePullPolicy: Always
         ports:
@@ -145,22 +137,22 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vulnapp-svc
+  name: vulnerableapp-svc
   namespace: vulnapp
   labels:
-    app: vulnapp
+    app: vulnerableapp
 spec:
   selector:
-    app: vulnapp
+    app: vulnerableapp
   type: NodePort
   ports:
   - nodePort: 30001
     port: 9090
     targetPort: 9090
 '''
-          writeFile file: 'vulnapp.yaml', text: vulnapp_yaml_content
-          sh 'ls -l vulnapp.yaml'
-          sh 'cat vulnapp.yaml'
+          writeFile file: 'vulnerableapp.yaml', text: vulnerableapp_yaml_content
+          sh 'ls -l vulnerableapp.yaml'
+          sh 'cat vulnerableapp.yaml'
 
         }
       }
@@ -169,7 +161,7 @@ spec:
     stage('Deploy App to k8s') {
       steps {
         script {
-          kubernetesDeploy(configs: "vulnapp.yaml", kubeconfigId: "kubeconfig")
+          kubernetesDeploy(configs: "vulnerableapp.yaml", kubeconfigId: "kubeconfig")
         }
       }
     }

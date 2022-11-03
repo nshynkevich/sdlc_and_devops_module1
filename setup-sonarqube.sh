@@ -35,7 +35,8 @@ sudo apt-get -y update
 
 # Install the latest version of PostgreSQL.
 # If you want a specific version, use 'postgresql-12' or similar instead of 'postgresql':
-sudo apt-get -y install unzip postgresql
+sudo apt-get -y install postgresql php-cli php-zip
+
 echo "Step 3: install postgresql"
 
 PSQL_CONFIG=$(sudo find / -name pg_hba.conf 2>/dev/null)
@@ -95,6 +96,38 @@ else
 systemctl enable sonar
 systemctl start sonar
 echo "Step 8: restart sonar.service"
+
+echo "Step 9: Install composer for PHP SAST scanning .. "
+cd /tmp
+curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
+HASH=`curl -sS https://composer.github.io/installer.sig`
+echo $HASH
+php -r "if (hash_file('SHA384', '/tmp/composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+cd /opt
+composer require rogervila/php-sonarqube-scanner --dev
+chown -R sonarqube: vendor/ 
+
+echo "Step 10: Install sonar-scanner .. "
+cd /opt
+wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
+unzip sonar-scanner-cli-4.7.0.2747-linux.zip 
+mv sonar-scanner-cli-* sonar-scanner
+sed -i 's!#sonar.host.url=.*!sonar.host.url=http://localhost:9090!' conf/sonar-scanner.properties 
+sed -i 's!#sonar.sourceEncoding=.*!sonar.sourceEncoding=UTF-8!' conf/sonar-scanner.properties 
+cat <<EOT >> /etc/profile.d/sonar-scanner.sh
+#!/bin/bash
+export PATH="$PATH:/opt/sonar-scanner/bin"
+EOT
+echo "Remainder: sonar-scanner installed in /opt/sonar-scanner/bin"
+chown -R sonarqube: sonar-scanner 
+
+
+echo "Step 11: Install OWASP Dependency Check CLI .. "
+cd /opt
+wget https://github.com/fabpot/local-php-security-checker/releases/download/v2.0.5/local-php-security-checker_2.0.5_linux_amd64 -O local-php-security-checker
+chmod +x /opt/local-php-security-checker
+cp /opt/local-php-security-checker /usr/local/bin/
 
 exit 0
 
