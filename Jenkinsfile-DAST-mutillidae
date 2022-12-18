@@ -135,6 +135,38 @@ CMD ["bash", "-c", "service mysql start ; service php8.1-fpm start ; service apa
       }
     }
 
+
+
+
+    stage("Scan docker image with trivy") {
+      steps {
+        script {
+          sh "echo 'Scanning docker image ${user}/${repo}:${env.imagetag}_${env.BUILD_ID} with trivy .. '"
+
+          sh '''
+
+echo "Simple trivy scan";
+trivy image -f table ''' + "${user}/${repo}:${env.imagetag}_${env.BUILD_ID}" + ''';
+
+if [ ! -e /tmp/trivy ]; then 
+  mkdir -p /tmp/trivy; 
+fi ;
+if [ ! -e /tmp/trivy/contrib ]; then 
+  git clone https://github.com/aquasecurity/trivy.git /tmp/trivy; 
+fi;
+
+TEMPLATE_PATH="@/tmp/trivy/contrib/html.tpl"; 
+echo "Scan with report ";
+trivy image --format template --template "${TEMPLATE_PATH}" -o ''' + "${TRIVY_TARGET_REPORT}" + ''' ''' + "${user}/${repo}:${env.imagetag}_${env.BUILD_ID}" + ''';
+
+          '''
+        }
+      }
+    }
+
+
+
+
     stage("Push image to DockerHub") {
       steps {
         script {
@@ -214,14 +246,6 @@ spec:
         }
       }
     }
-
-
-
-
-
-
-
-
     
     stage('OWASP ZAP Checking .. ') {
       steps {
@@ -229,32 +253,74 @@ spec:
           try {
             sh "echo 'OWASP ZAP scanning starting .. '"
 
-            def owaspZapTestResult = sh(script: '''
+            sh '''
 
-status=0;wget "${TARGET_URL_DEV}" --tries=5 -O - 2>/dev/null | grep -i mutillidae >/dev/null || status=1
-if [ $status -eq 1 ]; then  echo "  [x] Connection refused ${TARGET_URL_DEV}";exit 1; fi
+status=0;
+wget "${TARGET_URL_DEV}" --tries=5 -O - 2>/dev/null | grep -i mutillidae >/dev/null || status=1;
+if [ $status -eq 1 ]; then  
+  echo "  [x] Connection refused ${TARGET_URL_DEV}";
+  exit 1; 
+fi;
 
-echo "  [.] Start OWASP ZAP scan ${TARGET_URL_DEV} .. "
+echo "  [.] Start OWASP ZAP scan ${TARGET_URL_DEV} .. ";
 
-java -jar ${ZAP_HOME}/${ZAP_JAR} -cmd -quickurl ${TARGET_URL_DEV} -quickprogress -quickout ${TARGET_REPORT}
-if [ $? -eq 0 ]; then echo "  [+] OK"; 
-  if [ -e ${TARGET_REPORT} ]; then echo "  [+] Report (${TARGET_URL_DEV}): ${TARGET_REPORT} ready.";
-else echo "  [x] FAILURE";echo "  [-] Unable to scan ${TARGET_URL_DEV}"
-fi
+java -jar ${ZAP_HOME}/${ZAP_JAR} -cmd -quickurl ${TARGET_URL_DEV} -quickprogress -quickout ${ZAP_TARGET_REPORT};
+if [ $? -eq 0 ]; then 
+  echo "  [+] OK"; 
+  if [ -e ${ZAP_TARGET_REPORT} ]; then 
+    echo "  [+] Report (${TARGET_URL_DEV}): ${ZAP_TARGET_REPORT} ready.";
+  else
+    echo "  [-] Unable to create report ${ZAP_TARGET_REPORT} for ${TARGET_URL_DEV}. Just continue .. ";
+  fi;
+else 
+    echo "  [x] FAILURE";
+    echo "  [-] Unable to scan ${TARGET_URL_DEV}. Just continue .. ";
+fi;
 
-          ''', returnStdout:true).trim()
+          '''
 
           } catch (err) {
             currentBuild.result = 'FAILURE'
-            errorMsg = "Build Failure:"+ err.getMessage()
+            errorMsg = "Build Failure: "+ err.getMessage()
             owaspZapTestPassed = false
             throw err
           }
         }
       }
+    }
 
-      
+    stage('Analyzing OWASP ZAP Report') {
+      steps {
+        script {
+          try {
+              sh "echo 'Analyzing OWASP ZAP scan report .. '"
+              
+              sh '''
 
+if [ -e ${ZAP_TARGET_REPORT} ]; then 
+  echo "  [+] Report ${ZAP_TARGET_REPORT} found.";
+  HIGHMEDIUM_COUNT=`cat ${ZAP_TARGET_REPORT} | jq -r 'def count(stream): reduce stream as $i (0; .+1);count(.site[].alerts[] | select((.riskcode=="3") or .riskcode=="2") | .riskcode)'`;
+  if [ "$HIGHMEDIUM_COUNT" -eq "0" ]; then 
+    echo "[+] Not found HIGH or MEDIUM vulnerabilities => Continue pipeline .. "; 
+  else 
+    echo "[x] Found HIGH or MEDIUM vulnerabilities => Stop. (exit with code 1 commented out right now for DEBUG purposes)"; 
+    #exit 1;
+  fi;
+else 
+  echo "  [x] FAILURE";echo "  [-] Unable to find ${ZAP_TARGET_REPORT}";
+fi;
+
+            '''
+
+            } catch (err) {
+                currentBuild.result = 'FAILURE'
+                errorMsg = "OWASP ZAP Report analyze finished with unsatisfactory results (Filter condition NOT passed). Build Failure: "+ err.getMessage()
+                // Set owaspZapTestPassed to false if any filters not passed
+                owaspZapTestPassed = false
+                throw err
+            }
+        }
+      }
     }
 
     stage('Deploy App to k8s PROD') {

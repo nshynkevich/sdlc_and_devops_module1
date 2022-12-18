@@ -88,6 +88,29 @@ CMD java -jar /VulnerableApp-1.0.0.jar
       }
     }
 
+    stage("Scan with trivy") {
+      steps {
+        sh "trivy image -f table ${user}/${repo}:${env.imagetag}_${env.BUILD_ID}"
+        //sh "trivy image -f json -o trivyscan-1owasp-2build-${env.imagetag}_${env.BUILD_ID}.json ${user}/${repo}:${env.imagetag}_${env.BUILD_ID}"
+
+        //recordIssues(tools: [trivy(pattern: 'results.json')])
+      }
+    }
+/*
+    stage("Scan with trivy") {
+      steps {
+        sh "trivy image -f json -o trivyscan-${env.imagetag}_${env.BUILD_ID}.json ${user}/${repo}:${env.imagetag}_${env.BUILD_ID}"
+        //recordIssues(tools: [trivy(pattern: 'results.json')])
+      }
+    }
+
+    stage("Scan with trivy (Fail if HIGH,CRITICAL found)") {
+      steps {
+        sh "trivy image -f json -o trivyscan-_no-criticals_-${env.imagetag}_${env.BUILD_ID}.json --no-progress --exit-code 1 --severity HIGH,CRITICAL ${user}/${repo}:${env.imagetag}_${env.BUILD_ID}"
+        //recordIssues(tools: [trivy(pattern: 'results.json')])
+      }
+    }
+*/
     stage("Push image") {
       steps {
         script {
